@@ -14,6 +14,83 @@ let calendarAnchor = new Date();
 calendarAnchor.setHours(0,0,0,0);
 
 const typeLabel = t => ({school:"School",work:"Work",beta:"Beta",music:"Music",personal:"Personal"})[t] || "Event";
+const vibeLines = [
+  "Schedule loaded. Go make the day nervous.",
+  "Calendar says you're booked. Spirit says we're so back.",
+  "Dead space detected. That’s called freedom.",
+  "One thing at a time. Then absolutely cook.",
+  "Your week has lore now.",
+  "Nothing sneaks up on you in this house.",
+  "Mission control online.",
+  "Today looks beatable.",
+  "Tiny wins. Huge aura.",
+  "Schedule clean. Brain quieter."
+];
+
+const celebrationLines = [
+  "BANG. Off the board.",
+  "Cooked. Next.",
+  "One less thing haunting you.",
+  "Absolutely dispatched.",
+  "Donezo.",
+  "That assignment just got folded.",
+  "Calendar karma +10.",
+  "Clean work, killer."
+];
+
+function dailyVibe(){
+  const d=new Date();
+  const key=d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate();
+  return vibeLines[key % vibeLines.length];
+}
+
+function loadScore(){
+  const today=eventsFor(new Date()).length;
+  const due=upcomingTasks().filter(t=>new Date(t.due)-new Date()<86400000).length;
+  const score=today+due*2;
+  if(score<=2)return {label:"LIGHT WORK",emoji:"😌",cls:"light"};
+  if(score<=5)return {label:"BUSY",emoji:"⚡",cls:"busy"};
+  if(score<=8)return {label:"COOKED",emoji:"🔥",cls:"cooked"};
+  return {label:"BOSS FIGHT",emoji:"☠️",cls:"boss"};
+}
+
+function confettiBurst(){
+  const wrap=document.createElement("div");
+  wrap.className="confetti-wrap";
+  const glyphs=["✦","◆","●","★","✶","✹"];
+  for(let i=0;i<34;i++){
+    const s=document.createElement("span");
+    s.textContent=glyphs[i%glyphs.length];
+    s.style.left=`${45+Math.random()*10}%`;
+    s.style.top=`${35+Math.random()*20}%`;
+    s.style.setProperty("--x",`${(Math.random()-.5)*520}px`);
+    s.style.setProperty("--y",`${-120-Math.random()*340}px`);
+    s.style.setProperty("--r",`${Math.random()*720-360}deg`);
+    s.style.animationDelay=`${Math.random()*80}ms`;
+    wrap.appendChild(s);
+  }
+  document.body.appendChild(wrap);
+  setTimeout(()=>wrap.remove(),1200);
+}
+
+function hype(message){
+  const h=document.createElement("div");
+  h.className="hype-banner";
+  h.innerHTML=`<b>${esc(message)}</b><span>Day Rush</span>`;
+  document.body.appendChild(h);
+  requestAnimationFrame(()=>h.classList.add("show"));
+  setTimeout(()=>h.classList.remove("show"),1500);
+  setTimeout(()=>h.remove(),1900);
+}
+
+function dayComplete(){
+  const today=eventsFor(new Date());
+  const openDue=getState().tasks.filter(t=>!t.completed && sameDay(t.due,new Date()));
+  const now=new Date();
+  const remaining=today.filter(e=>new Date(e.end)>now);
+  return remaining.length===0 && openDue.length===0;
+}
+
 const typeClass = t => ["school","work","beta","music","personal"].includes(t) ? t : "personal";
 
 function startOfWeek(date){
@@ -54,9 +131,12 @@ function upcomingEvents(){
 }
 function toast(message){
   const x=document.createElement("div");
-  x.className="toast"; x.textContent=message;
+  x.className="toast";
+  x.innerHTML=`<span class="toast-spark">✦</span><b>${esc(message)}</b>`;
   document.body.appendChild(x);
-  setTimeout(()=>x.remove(),2400);
+  requestAnimationFrame(()=>x.classList.add("show"));
+  setTimeout(()=>x.classList.remove("show"),2100);
+  setTimeout(()=>x.remove(),2500);
 }
 function setTab(next){
   tab=next; localStorage.setItem("dr-tab",tab);
@@ -64,13 +144,16 @@ function setTab(next){
 }
 
 function topHeader(){
+  const score=loadScore();
   return `<header class="topbar">
     <div>
       <span class="eyebrow">${fmtDay(new Date()).toUpperCase()}</span>
-      <h1>Day Rush</h1>
+      <div class="brand-row"><h1>Day Rush</h1><span class="pulse-mark">●</span></div>
+      <p class="vibe-line">${esc(dailyVibe())}</p>
     </div>
     <div class="top-actions">
-      ${getState().settings.canvasUser?`<span class="sync-chip"><i></i> Canvas</span>`:""}
+      <span class="load-badge ${score.cls}">${score.emoji} ${score.label}</span>
+      ${getState().settings.canvasUser?`<span class="sync-chip"><i></i> Canvas live</span>`:""}
       <button class="icon-button" id="themeQuick" title="Toggle theme">◐</button>
     </div>
   </header>`;
@@ -109,6 +192,7 @@ function renderToday(){
   const free=next?minutesBetween(n,next.start):0;
 
   return `<main class="simple-main">
+    ${dayComplete()?`<section class="victory-strip"><span>🏁</span><div><b>DAY CLEARED</b><small>Nothing left can hurt you.</small></div></section>`:""}
     <section class="today-head">
       <div>
         <span class="eyebrow">${current?"RIGHT NOW":next?"NEXT":"TODAY"}</span>
@@ -121,7 +205,7 @@ function renderToday(){
     <div class="two-column">
       <section>
         <div class="section-title"><h3>Today</h3><span>${today.length}</span></div>
-        <div class="stack">${today.length?today.map(eventListCard).join(""):`<div class="empty">No commitments today.</div>`}</div>
+        <div class="stack">${today.length?today.map(eventListCard).join(""):`<div class="empty">Nothing on the board. Glorious.</div>`}</div>
       </section>
       <section>
         <div class="section-title"><h3>Assignments</h3><span>${due.length}</span></div>
@@ -129,7 +213,7 @@ function renderToday(){
           <div class="mini-ring" style="--p:${progressPct()}">${progressPct()}%</div>
           <div><b>${upcomingTasks().length} open Canvas items</b><small>${getState().settings.canvasUser?"Live Canvas data":"Canvas preview"}</small></div>
         </div>
-        <div class="stack">${due.map(taskCard).join("")||`<div class="empty">Nothing due soon.</div>`}</div>
+        <div class="stack">${due.map(taskCard).join("")||`<div class="empty">Canvas is quiet. Suspiciously peaceful.</div>`}</div>
       </section>
     </div>
   </main>`;
@@ -149,7 +233,7 @@ function calendarToolbar(){
       <h2>${label}</h2>
     </div>
     <div class="calendar-actions">
-      ${calendarMode!=="month"?`<div class="zoom-control"><button id="zoomOut">−</button><span>Zoom</span><button id="zoomIn">+</button></div>`:""}
+      ${calendarMode!=="month"?`<div class="zoom-control"><button id="zoomOut">−</button><span>Density</span><button id="zoomIn">+</button></div>`:""}
       <div class="segment">
         <button data-cal-mode="day" class="${calendarMode==="day"?"active":""}">Day</button>
         <button data-cal-mode="week" class="${calendarMode==="week"?"active":""}">Week</button>
@@ -214,7 +298,7 @@ function renderMonth(){
         <div class="month-items">
           ${es.slice(0,3).map(e=>`<span class="month-event ${typeClass(e.type)}">${esc(e.title)}</span>`).join("")}
           ${ts.slice(0,2).map(t=>`<span class="month-task">• ${esc(t.title)}</span>`).join("")}
-          ${es.length+ts.length>5?`<small>+${es.length+ts.length-5} more</small>`:""}
+          ${es.length+ts.length>5?`<small>+${es.length+ts.length-5} more chaos</small>`:""}
         </div>
       </button>`;
     }).join("")}
@@ -236,7 +320,7 @@ function renderTasks(){
   const all=[...getState().tasks].sort((a,b)=>new Date(a.due)-new Date(b.due));
   return `<main class="simple-main">
     <div class="page-head"><div><span class="eyebrow">TASKS</span><h2>${upcomingTasks().length} open</h2></div></div>
-    <div class="task-list">${all.length?all.map(taskCard).join(""):`<div class="empty">No tasks.</div>`}</div>
+    <div class="task-list">${all.length?all.map(taskCard).join(""):`<div class="empty">Task list is cleaner than a whistle.</div>`}</div>
   </main>`;
 }
 
@@ -247,7 +331,7 @@ function renderInbox(){
     <div class="stack">${inbox.length?inbox.map(i=>`<article class="inbox-card">
       <div><b>${esc(i.title)}</b><small>${esc(i.note)}</small></div>
       <div><button class="subtle-button" data-ignore="${esc(i.id)}">Ignore</button><button class="primary-button" data-confirm="${esc(i.id)}">Set date</button></div>
-    </article>`).join(""):`<div class="empty">Inbox zero.</div>`}</div>
+    </article>`).join(""):`<div class="empty">Inbox zero. Michelin-star behavior.</div>`}</div>
   </main>`;
 }
 
@@ -348,7 +432,12 @@ function bind(){
     const t=getState().tasks.find(x=>x.id===btn.dataset.task);
     if(!t)return;
     if(t.source==="canvas"){toast("Canvas controls completion.");return;}
-    t.completed=!t.completed;save();render();
+    t.completed=!t.completed;save();
+    if(t.completed){
+      confettiBurst();
+      hype(celebrationLines[Math.floor(Math.random()*celebrationLines.length)]);
+    }
+    render();
   });
 
   document.querySelectorAll("[data-ignore]").forEach(btn=>btn.onclick=()=>{
@@ -380,7 +469,9 @@ function bind(){
     }else{
       getState().events.push({id:uid(),...data,source:"manual"});
     }
-    save();document.getElementById("eventDialog").close();toast(id?"Event updated":"Event added");render();
+    save();document.getElementById("eventDialog").close();
+    if(id){toast("Event updated");}else{confettiBurst();hype("LOCKED IN.");}
+    render();
   };
   document.getElementById("deleteEvent").onclick=()=>{
     const id=document.getElementById("editId").value;

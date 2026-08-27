@@ -1,4 +1,4 @@
-const CACHE="day-rush-homework-only-v7";
+const CACHE="day-rush-fun-v8";
 const ASSETS=[
   "./","./index.html","./styles.css","./manifest.webmanifest",
   "./icons/icon.svg","./src/app.js","./src/store.js","./src/canvas.js",
