@@ -110,3 +110,19 @@ The Calendar tab uses a conventional desktop week view:
 - empty space is intentionally preserved
 - Canvas due items sit above the time grid
 
+
+## UI / calendar redesign
+This build simplifies the interface and makes Calendar the default tab.
+
+Calendar now includes:
+- Day / Week / Month views
+- Previous / Today / Next navigation
+- Week-to-week and month-to-month browsing
+- Zoom controls for the time grid
+- Visible empty time / deadspace
+- Click any calendar event to edit title, date, start/end time, type, and location
+- Delete events from the editor
+- Month cells can be clicked to jump into that day
+- Manual + button opens the same working event editor
+
+The older fixed bottom navigation and dense dashboard presentation have been removed.
