@@ -1,39 +1,89 @@
 export default {
   async fetch(request) {
-    const url=new URL(request.url);
-    if(request.method==="OPTIONS") return new Response(null,{headers:corsHeaders()});
-    if(url.pathname==="/calendar") return handleCalendar(request);
-    if(url.pathname==="/canvas") return handleCanvasApi(request,url);
-    return json({error:"Not found"},404);
+    const url = new URL(request.url);
+
+    if (request.method === "OPTIONS") {
+      return new Response(null, { headers: corsHeaders() });
+    }
+
+    if (url.pathname === "/calendar") {
+      return handleCalendar(request);
+    }
+
+    if (url.pathname === "/health") {
+      return json({ ok: true, service: "dayrush-canvas-proxy" });
+    }
+
+    return json({ error: "Not found" }, 404);
   }
 };
-async function handleCalendar(request){
-  const feed=request.headers.get("X-Canvas-Feed");
-  if(!feed)return json({error:"Missing Canvas feed URL"},400);
-  let u; try{u=new URL(feed)}catch{return json({error:"Invalid feed URL"},400)}
-  if(u.origin!=="https://miamioh.instructure.com")return json({error:"Feed origin not allowed"},403);
-  if(!u.pathname.startsWith("/feeds/calendars/")||!u.pathname.endsWith(".ics"))return json({error:"Only Miami Canvas calendar feeds are allowed"},403);
-  const upstream=await fetch(u.toString(),{headers:{"Accept":"text/calendar,text/plain,*/*"}});
-  const h=new Headers(corsHeaders());
-  h.set("content-type",upstream.headers.get("content-type")||"text/calendar; charset=utf-8");
-  h.set("cache-control","no-store");
-  return new Response(upstream.body,{status:upstream.status,headers:h});
+
+async function handleCalendar(request) {
+  const feed = request.headers.get("X-Canvas-Feed");
+  if (!feed) return json({ error: "Missing Canvas feed URL" }, 400);
+
+  let parsed;
+  try {
+    parsed = new URL(feed);
+  } catch {
+    return json({ error: "Invalid feed URL" }, 400);
+  }
+
+  if (parsed.origin !== "https://miamioh.instructure.com") {
+    return json({ error: "Feed origin not allowed" }, 403);
+  }
+
+  if (!parsed.pathname.startsWith("/feeds/calendars/") || !parsed.pathname.endsWith(".ics")) {
+    return json({ error: "Only Miami Canvas calendar feeds are allowed" }, 403);
+  }
+
+  // Mimic a normal calendar/subscription client more closely.
+  // Some Canvas installations reject bare server-to-server requests.
+  const upstream = await fetch(parsed.toString(), {
+    method: "GET",
+    redirect: "follow",
+    headers: {
+      "Accept": "text/calendar,application/ics;q=0.9,text/plain;q=0.8,*/*;q=0.7",
+      "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Safari/18.6",
+      "Referer": "https://miamioh.instructure.com/calendar",
+      "Origin": "https://miamioh.instructure.com",
+      "Cache-Control": "no-cache",
+      "Pragma": "no-cache"
+    }
+  });
+
+  const body = await upstream.arrayBuffer();
+
+  const headers = new Headers(corsHeaders());
+  headers.set("content-type", upstream.headers.get("content-type") || "text/calendar; charset=utf-8");
+  headers.set("cache-control", "no-store");
+  headers.set("x-dayrush-upstream-status", String(upstream.status));
+
+  // Preserve a little upstream context for debugging without leaking the feed URL.
+  const via = upstream.headers.get("via");
+  if (via) headers.set("x-dayrush-upstream-via", via);
+
+  return new Response(body, {
+    status: upstream.status,
+    headers
+  });
 }
-async function handleCanvasApi(request,url){
-  const token=request.headers.get("X-Canvas-Token"),target=url.searchParams.get("target");
-  if(!token||!target)return json({error:"Missing token or target"},400);
-  let u;try{u=new URL(target)}catch{return json({error:"Invalid target URL"},400)}
-  if(u.origin!=="https://miamioh.instructure.com")return json({error:"Target origin not allowed"},403);
-  const upstream=await fetch(u.toString(),{headers:{"Authorization":`Bearer ${token}`,"Accept":"application/json"}});
-  const h=new Headers(corsHeaders());
-  const ct=upstream.headers.get("content-type");if(ct)h.set("content-type",ct);
-  const link=upstream.headers.get("link");if(link)h.set("link",link);
-  return new Response(upstream.body,{status:upstream.status,headers:h});
+
+function corsHeaders() {
+  return {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "X-Canvas-Feed, Content-Type",
+    "Access-Control-Allow-Methods": "GET, OPTIONS",
+    "Access-Control-Expose-Headers": "X-DayRush-Upstream-Status, X-DayRush-Upstream-Via"
+  };
 }
-function corsHeaders(){return{
-  "Access-Control-Allow-Origin":"*",
-  "Access-Control-Allow-Headers":"X-Canvas-Token, X-Canvas-Feed, Content-Type",
-  "Access-Control-Allow-Methods":"GET, OPTIONS",
-  "Access-Control-Expose-Headers":"Link"
-}}
-function json(data,status=200){return new Response(JSON.stringify(data),{status,headers:{...corsHeaders(),"content-type":"application/json"}})}
+
+function json(data, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: {
+      ...corsHeaders(),
+      "content-type": "application/json"
+    }
+  });
+}
