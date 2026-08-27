@@ -4,6 +4,7 @@ const KEY = "day-rush-state-v2";
 const TOKEN_KEY = "day-rush-canvas-token";
 const BASE_KEY = "day-rush-canvas-base";
 const REMEMBER_KEY = "day-rush-canvas-remember";
+const CANVAS_FEED_KEY = "day-rush-canvas-feed";
 
 const baseState = () => ({
   ...buildSeed(),
@@ -13,7 +14,8 @@ const baseState = () => ({
     rememberCanvas: localStorage.getItem(REMEMBER_KEY) === "true",
     lastCanvasSync:null,
     canvasUser:null,
-    canvasProxy: localStorage.getItem("day-rush-canvas-proxy") || ""
+    canvasProxy: localStorage.getItem("day-rush-canvas-proxy") || "",
+    canvasFeedUrl: localStorage.getItem(CANVAS_FEED_KEY) || ""
   }
 });
 
@@ -40,6 +42,14 @@ export const patch = partial => { state = {...state,...partial}; save(); };
 export const patchSettings = partial => {
   state.settings = {...state.settings,...partial};
   save();
+};
+
+
+export const setCanvasFeedUrl = feed => {
+  const clean = String(feed || "").trim();
+  if (clean) localStorage.setItem(CANVAS_FEED_KEY, clean);
+  else localStorage.removeItem(CANVAS_FEED_KEY);
+  patchSettings({canvasFeedUrl:clean});
 };
 
 export const setCanvasProxy = proxy => {

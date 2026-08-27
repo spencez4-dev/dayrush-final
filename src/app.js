@@ -1,5 +1,5 @@
 import {
-  getState, save, patchSettings, setCanvasBase, setCanvasProxy, setCanvasToken,
+  getState, save, patchSettings, setCanvasBase, setCanvasProxy, setCanvasFeedUrl, setCanvasToken,
   getCanvasToken, clearCanvasToken, resetAll
 } from "./store.js";
 import { syncCanvas } from "./canvas.js";
@@ -258,14 +258,10 @@ function renderYou(){
     <section class="settings-card">
       <div class="section-title"><h3>Canvas</h3><span>${s.canvasUser?"Connected":"Not connected"}</span></div>
       ${s.canvasUser?`<div class="identity"><b>${esc(s.canvasUser.name)}</b><small>${esc(s.canvasUser.primary_email||"Miami Canvas")}</small></div>`:""}
-      <label>Canvas URL<input id="canvasBase" value="${esc(s.canvasBase)}"></label>
-      <label>Canvas Proxy URL<input id="canvasProxy" value="${esc(s.canvasProxy||"")}" placeholder="https://your-worker.workers.dev"></label>
-      <label>Access token<input id="canvasToken" type="password" placeholder="${hasToken?"Token loaded":"Paste token"}" autocomplete="off"></label>
-      <label class="check-label"><input id="rememberToken" type="checkbox" ${s.rememberCanvas?"checked":""}>Remember token on this device</label>
-      <div class="button-row">
-        <button class="primary-button" id="connectCanvas">${s.canvasUser?"Refresh Canvas":"Connect Canvas"}</button>
-        ${hasToken?`<button class="subtle-button" id="disconnectCanvas">Forget token</button>`:""}
-      </div>
+      <label>Canvas Calendar Feed URL<input id="canvasFeedUrl" type="password" value="${esc(s.canvasFeedUrl||"")}" placeholder="https://miamioh.instructure.com/feeds/calendars/...ics" autocomplete="off"></label>
+      <label>Canvas Proxy URL<input id="canvasProxy" value="${esc(s.canvasProxy||"")}" placeholder="https://dayrush-final.spencez4.workers.dev"></label>
+      <div class="security-note">Your Canvas feed URL is private. Keep it off GitHub and only paste it into Day Rush on your own device.</div>
+      <div class="button-row"><button class="primary-button" id="connectCanvas">${s.canvasUser?"Refresh Canvas":"Connect Canvas"}</button></div>
       <div id="canvasMessage" class="status-message">${s.lastCanvasSync?`Last sync ${fmtShort(s.lastCanvasSync)} ${fmtTime(s.lastCanvasSync)}`:""}</div>
     </section>
     <section class="settings-card">
@@ -395,21 +391,16 @@ function bind(){
 
   document.getElementById("connectCanvas")?.addEventListener("click",async()=>{
     const msg=document.getElementById("canvasMessage");
-    const base=document.getElementById("canvasBase").value.trim();
+    const feed=document.getElementById("canvasFeedUrl").value.trim();
     const proxy=document.getElementById("canvasProxy").value.trim();
-    const typed=document.getElementById("canvasToken").value.trim();
-    const remember=document.getElementById("rememberToken").checked;
-    setCanvasBase(base);setCanvasProxy(proxy);
-    if(typed)setCanvasToken(typed,remember);else if(getCanvasToken())setCanvasToken(getCanvasToken(),remember);
-    if(!getCanvasToken()){msg.textContent="Paste your Canvas token first.";return;}
-    msg.textContent="Connecting…";
+    setCanvasFeedUrl(feed); setCanvasProxy(proxy);
+    msg.textContent="Syncing Canvas calendar…";
     try{
       const result=await syncCanvas();
-      msg.textContent=`Connected as ${result.profile.name}. ${result.count} planner items loaded.`;
-      toast("Canvas connected");setTimeout(render,500);
+      msg.textContent=`Canvas connected. ${result.taskCount} assignments and ${result.eventCount} calendar events loaded.`;
+      toast("Canvas calendar synced"); setTimeout(render,500);
     }catch(err){msg.textContent=err.message;toast("Canvas connection failed");}
   });
-  document.getElementById("disconnectCanvas")?.addEventListener("click",()=>{clearCanvasToken();toast("Token forgotten");render();});
 }
 
 function toggleTheme(){

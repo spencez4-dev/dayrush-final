@@ -1,150 +1,80 @@
-import { getState, getCanvasToken, patchSettings, save } from "./store.js";
+import { getState, patchSettings, save } from "./store.js";
 
-function linkNext(header){
-  if(!header) return null;
-  for(const part of header.split(",")){
-    if(/rel="?next"?/.test(part)){
-      const m = part.match(/<([^>]+)>/);
-      if(m) return m[1];
-    }
-  }
-  return null;
-}
-
-function normalizeBase(value){
-  const raw = String(value || "").trim().replace(/\/+$/,"");
-  if(!/^https?:\/\//i.test(raw)) throw new Error("Canvas URL must start with https://");
+function normalizeProxy(value){
+  const raw=String(value||"").trim().replace(/\/+$/,"");
+  if(!raw) throw new Error("Canvas Proxy URL is required.");
+  if(!/^https?:\/\//i.test(raw)) throw new Error("Canvas Proxy URL must start with https://");
   return raw;
 }
-
-function buildTarget(path){
-  const { canvasBase } = getState().settings;
-  return new URL(path, `${normalizeBase(canvasBase)}/`).toString();
+function normalizeFeed(value){
+  const raw=String(value||"").trim();
+  if(!raw) throw new Error("Canvas Calendar Feed URL is required.");
+  let u;
+  try{u=new URL(raw)}catch{throw new Error("Canvas Calendar Feed URL is invalid.")}
+  if(u.origin!=="https://miamioh.instructure.com") throw new Error("Feed must come from Miami Canvas.");
+  if(!u.pathname.startsWith("/feeds/calendars/")||!u.pathname.endsWith(".ics")) throw new Error("That is not a Canvas calendar feed.");
+  return u.toString();
 }
-
-function proxyUrlFor(target){
-  const proxy = String(getState().settings.canvasProxy || "").trim().replace(/\/+$/,"");
-  if(!proxy) return target;
-  return `${proxy}/canvas?target=${encodeURIComponent(target)}`;
+function unfold(text){return text.replace(/\r\n[ \t]/g,"").replace(/\n[ \t]/g,"")}
+function unesc(v=""){return v.replace(/\\n/gi,"\n").replace(/\\,/g,",").replace(/\\;/g,";").replace(/\\\\/g,"\\")}
+function prop(line){
+  const i=line.indexOf(":"); if(i<0)return null;
+  const left=line.slice(0,i),value=line.slice(i+1);
+  const [name,...params]=left.split(";");
+  return {name:name.toUpperCase(),params:params.join(";"),value};
 }
-
-async function request(target){
-  const token = getCanvasToken();
-  if(!token) throw new Error("No Canvas token set.");
-
-  const proxy = String(getState().settings.canvasProxy || "").trim();
-  const url = proxyUrlFor(target);
-
-  let response;
-  try{
-    response = await fetch(url,{
-      method:"GET",
-      headers: proxy
-        ? {"X-Canvas-Token": token, "Accept":"application/json"}
-        : {"Authorization":`Bearer ${token}`, "Accept":"application/json"}
-    });
-  }catch(err){
-    if(!proxy){
-      throw new Error("Direct browser connection to Canvas failed. Use the included Canvas Proxy URL in Day Rush settings.");
-    }
-    throw new Error(`Canvas proxy could not be reached: ${err?.message || "network error"}`);
-  }
-
-  if(response.status===401 || response.status===403){
-    throw new Error("Canvas rejected the token. Check that it is current and copied exactly.");
-  }
-  if(!response.ok){
-    let detail="";
-    try{
-      const text=await response.text();
-      if(text) detail=` ${text.slice(0,140)}`;
-    }catch{}
-    throw new Error(`Canvas returned HTTP ${response.status}.${detail}`);
-  }
-  return response;
+function dt(raw){
+  if(!raw)return null; const v=raw.trim();
+  if(/^\d{8}$/.test(v)) return new Date(+v.slice(0,4),+v.slice(4,6)-1,+v.slice(6,8),23,59);
+  if(/^\d{8}T\d{6}Z$/.test(v)) return new Date(`${v.slice(0,4)}-${v.slice(4,6)}-${v.slice(6,8)}T${v.slice(9,11)}:${v.slice(11,13)}:${v.slice(13,15)}Z`);
+  if(/^\d{8}T\d{6}$/.test(v)) return new Date(+v.slice(0,4),+v.slice(4,6)-1,+v.slice(6,8),+v.slice(9,11),+v.slice(11,13),+v.slice(13,15));
+  return new Date(v);
 }
-
-async function paged(firstUrl,maxPages=10){
+function parseICS(text){
+  const blocks=unfold(text).split("BEGIN:VEVENT").slice(1).map(x=>x.split("END:VEVENT")[0]);
   const out=[];
-  let next=firstUrl;
-  let count=0;
-  while(next && count<maxPages){
-    const response=await request(next);
-    const data=await response.json();
-    if(Array.isArray(data)) out.push(...data);
-    else return data;
-    next=linkNext(response.headers.get("Link"));
-    count++;
+  for(const block of blocks){
+    const p={};
+    for(const line of block.split(/\r?\n/)){const x=prop(line);if(x&&!p[x.name])p[x.name]=x}
+    const start=dt(p.DTSTART?.value),end=dt(p.DTEND?.value)||start;
+    if(!start)continue;
+    const title=unesc(p.SUMMARY?.value||"Canvas item");
+    const desc=unesc(p.DESCRIPTION?.value||"");
+    const url=unesc(p.URL?.value||"");
+    const uid=unesc(p.UID?.value||`${title}-${start.toISOString()}`);
+    const duration=end?Math.max(0,(end-start)/60000):0;
+    const isTask=start.getHours()===23||duration<=5||/assignment|quiz|discussion|homework|exam|module|due/i.test(`${title} ${desc}`);
+    const match=title.match(/^\[([^\]]+)\]\s*(.*)$/);
+    out.push({uid,title:match?match[2]:title,course:match?match[1]:"Canvas",start,end,url,isTask});
   }
   return out;
 }
-
-function deriveCompleted(item){
-  if(item?.planner_override?.marked_complete===true) return true;
-  const sub=item?.submissions;
-  if(Array.isArray(sub)){
-    return sub.some(x=>x?.submitted_at || ["submitted","graded","pending_review","complete"].includes(x?.workflow_state));
-  }
-  return Boolean(sub?.submitted_at || ["submitted","graded","pending_review","complete"].includes(sub?.workflow_state));
+async function getFeed(){
+  const s=getState().settings,proxy=normalizeProxy(s.canvasProxy),feed=normalizeFeed(s.canvasFeedUrl);
+  let r;
+  try{
+    r=await fetch(`${proxy}/calendar`,{headers:{"X-Canvas-Feed":feed,"Accept":"text/calendar,text/plain,*/*"}});
+  }catch{throw new Error("Could not reach the Canvas calendar proxy.")}
+  if(!r.ok) throw new Error(`Canvas feed returned HTTP ${r.status}: ${(await r.text()).slice(0,100)}`);
+  return r.text();
 }
-
-function taskFromPlanner(item){
-  const p=item.plannable||{};
-  const due=p.due_at||p.todo_date||p.start_at||item.plannable_date;
-  if(!due) return null;
-  const type=item.plannable_type||"item";
-  const pid=item.plannable_id??p.id??`${p.title}-${due}`;
-  return {
-    id:`canvas-${type}-${pid}`,
-    course:item.context_name||"Canvas",
-    title:p.title||p.name||"Canvas item",
-    due,
-    points:p.points_possible??null,
-    completed:deriveCompleted(item),
-    source:"canvas",
-    canvasUrl:p.html_url||item.html_url||null,
-    submissionState:Array.isArray(item.submissions)
-      ? item.submissions?.[0]?.workflow_state||null
-      : item.submissions?.workflow_state||null,
-    plannableType:type
-  };
-}
-
-export async function canvasProfile(){
-  const response=await request(buildTarget("/api/v1/users/self/profile"));
-  return response.json();
-}
-
-export async function fetchPlanner({pastDays=14,futureDays=240}={}){
-  const start=new Date(Date.now()-pastDays*86400000).toISOString();
-  const end=new Date(Date.now()+futureDays*86400000).toISOString();
-  const u=new URL(buildTarget("/api/v1/planner/items"));
-  u.searchParams.set("start_date",start);
-  u.searchParams.set("end_date",end);
-  u.searchParams.set("per_page","100");
-  const items=await paged(u.toString());
-  return items.map(taskFromPlanner).filter(Boolean);
-}
-
 export async function syncCanvas(){
-  const profile=await canvasProfile();
-  const incoming=await fetchPlanner();
-  const state=getState();
-
-  const existing=new Map(state.tasks.map(t=>[t.id,t]));
-  incoming.forEach(task=>{
-    const old=existing.get(task.id);
-    existing.set(task.id,old?{...old,...task}:task);
-  });
-
-  state.tasks=[...existing.values()]
-    .filter(t=>t.source!=="canvas-preview")
-    .sort((a,b)=>new Date(a.due)-new Date(b.due));
-
-  patchSettings({
-    canvasUser:{id:profile.id,name:profile.name,primary_email:profile.primary_email||null},
-    lastCanvasSync:new Date().toISOString()
-  });
+  const items=parseICS(await getFeed()),state=getState();
+  const tasks=state.tasks.filter(t=>t.source!=="canvas-preview"&&t.source!=="canvas-feed");
+  const events=state.events.filter(e=>e.source!=="canvas-feed");
+  let taskCount=0,eventCount=0;
+  for(const item of items){
+    if(item.isTask){
+      tasks.push({id:`canvas-feed-task-${item.uid}`,course:item.course,title:item.title,due:item.start.toISOString(),points:null,completed:false,source:"canvas-feed",canvasUrl:item.url||null});
+      taskCount++;
+    }else{
+      events.push({id:`canvas-feed-event-${item.uid}`,title:item.title,start:item.start.toISOString(),end:(item.end||item.start).toISOString(),type:"school",location:"",source:"canvas-feed",canvasUrl:item.url||null});
+      eventCount++;
+    }
+  }
+  state.tasks=tasks.sort((a,b)=>new Date(a.due)-new Date(b.due));
+  state.events=events.sort((a,b)=>new Date(a.start)-new Date(b.start));
+  patchSettings({canvasUser:{id:"calendar-feed",name:"Miami Canvas",primary_email:null},lastCanvasSync:new Date().toISOString()});
   save();
-  return {profile,count:incoming.length};
+  return {profile:{name:"Miami Canvas"},count:taskCount+eventCount,taskCount,eventCount};
 }

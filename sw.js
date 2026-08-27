@@ -1,4 +1,4 @@
-const CACHE="day-rush-final-v5";
+const CACHE="day-rush-canvas-feed-v6";
 const ASSETS=[
   "./","./index.html","./styles.css","./manifest.webmanifest",
   "./icons/icon.svg","./src/app.js","./src/store.js","./src/canvas.js",

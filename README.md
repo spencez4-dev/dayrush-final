@@ -126,3 +126,6 @@ Calendar now includes:
 - Manual + button opens the same working event editor
 
 The older fixed bottom navigation and dense dashboard presentation have been removed.
+
+
+Canvas integration now uses the private .ics calendar feed through the Cloudflare Worker. Do not commit the feed URL.
