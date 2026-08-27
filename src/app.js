@@ -397,8 +397,8 @@ function bind(){
     msg.textContent="Syncing Canvas calendar…";
     try{
       const result=await syncCanvas();
-      msg.textContent=`Canvas connected. ${result.taskCount} assignments and ${result.eventCount} calendar events loaded.`;
-      toast("Canvas calendar synced"); setTimeout(render,500);
+      msg.textContent=`Canvas connected. ${result.taskCount} coursework items loaded.`;
+      toast("Canvas homework synced"); setTimeout(render,500);
     }catch(err){msg.textContent=err.message;toast("Canvas connection failed");}
   });
 }
