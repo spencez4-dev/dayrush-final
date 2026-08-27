@@ -183,6 +183,63 @@ function taskCard(t){
   </article>`;
 }
 
+
+function weekAhead(){
+  const now=new Date();
+  const end=new Date(now); end.setDate(end.getDate()+7);
+  const ev=getState().events
+    .filter(e=>new Date(e.start)>=now && new Date(e.start)<=end)
+    .sort((a,b)=>new Date(a.start)-new Date(b.start))
+    .slice(0,5);
+  return ev;
+}
+
+function workloadSummary(){
+  const now=new Date();
+  const end=new Date(now); end.setDate(end.getDate()+7);
+  const tasks=getState().tasks.filter(t=>!t.completed && new Date(t.due)>=now && new Date(t.due)<=end);
+  const events=getState().events.filter(e=>new Date(e.start)>=now && new Date(e.start)<=end);
+  const days=new Set(events.map(e=>new Date(e.start).toDateString()));
+  return {tasks:tasks.length,events:events.length,activeDays:days.size};
+}
+
+function renderWeekStrip(){
+  const today=new Date();
+  const days=Array.from({length:7},(_,i)=>{const d=new Date(today);d.setDate(today.getDate()+i);return d});
+  return `<section class="week-strip">
+    ${days.map((d,i)=>{
+      const count=eventsFor(d).length;
+      const due=getState().tasks.filter(t=>!t.completed&&sameDay(t.due,d)).length;
+      return `<button class="week-day ${i===0?"active":""}" data-jump-date="${d.toISOString()}">
+        <span>${d.toLocaleDateString([], {weekday:"short"}).toUpperCase()}</span>
+        <b>${d.getDate()}</b>
+        <small>${count+due?`${count+due} item${count+due===1?"":"s"}`:"clear"}</small>
+      </button>`;
+    }).join("")}
+  </section>`;
+}
+
+function renderMomentum(){
+  const s=workloadSummary();
+  const next=weekAhead();
+  return `<section class="momentum-grid">
+    <div class="momentum-card">
+      <span class="eyebrow">NEXT 7 DAYS</span>
+      <div class="stat-row">
+        <div><b>${s.tasks}</b><small>due</small></div>
+        <div><b>${s.events}</b><small>events</small></div>
+        <div><b>${7-s.activeDays}</b><small>open days</small></div>
+      </div>
+    </div>
+    <div class="momentum-card next-up-card">
+      <span class="eyebrow">COMING UP</span>
+      <div class="mini-upcoming">
+        ${next.length?next.slice(0,3).map(e=>`<button data-edit-event="${e.id}"><b>${esc(e.title)}</b><small>${new Date(e.start).toLocaleDateString([], {weekday:"short"})} · ${fmtTime(e.start)}</small></button>`).join(""):`<div class="clear-week">Wide open. Go cause problems.</div>`}
+      </div>
+    </div>
+  </section>`;
+}
+
 function renderToday(){
   const today=eventsFor(new Date());
   const n=new Date();
@@ -216,7 +273,7 @@ function renderToday(){
         <div class="stack">${due.map(taskCard).join("")||`<div class="empty">Canvas is quiet. Suspiciously peaceful.</div>`}</div>
       </section>
     </div>
-  </main>`;
+  ${renderWeekStrip()}${renderMomentum()}</main>`;
 }
 
 function calendarToolbar(){

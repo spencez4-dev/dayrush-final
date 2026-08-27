@@ -273,3 +273,130 @@ body.light{
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation:none!important;transition:none!important}
 }
+
+
+/* v9: use the whole damn screen */
+.simple-main{
+  min-height:calc(100vh - 150px);
+  padding-bottom:84px;
+}
+.two-column{
+  align-items:start;
+}
+.week-strip{
+  margin-top:18px;
+  display:grid;
+  grid-template-columns:repeat(7,1fr);
+  gap:8px;
+}
+.week-day{
+  appearance:none;
+  border:1px solid var(--line);
+  background:var(--panel);
+  color:var(--text);
+  border-radius:10px;
+  min-height:92px;
+  padding:11px 12px;
+  text-align:left;
+  display:grid;
+  align-content:space-between;
+  cursor:pointer;
+  transition:.14s ease;
+}
+.week-day:hover{
+  transform:translateY(-2px);
+  border-color:rgba(227,27,35,.25);
+}
+.week-day.active{
+  background:linear-gradient(145deg,rgba(227,27,35,.11),var(--panel));
+  border-color:rgba(227,27,35,.28);
+}
+.week-day span{
+  font-size:9px;
+  font-weight:950;
+  letter-spacing:.11em;
+  color:var(--muted);
+}
+.week-day b{
+  font-size:24px;
+  line-height:1;
+}
+.week-day small{
+  font-size:9px;
+  color:var(--muted);
+}
+.momentum-grid{
+  margin-top:10px;
+  display:grid;
+  grid-template-columns:.8fr 1.2fr;
+  gap:10px;
+}
+.momentum-card{
+  min-height:132px;
+  border:1px solid var(--line);
+  background:var(--panel);
+  border-radius:10px;
+  padding:16px;
+}
+.stat-row{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:8px;
+  margin-top:18px;
+}
+.stat-row div{
+  display:grid;
+  gap:2px;
+}
+.stat-row b{
+  font-size:25px;
+  letter-spacing:-.05em;
+}
+.stat-row small{
+  font-size:9px;
+  color:var(--muted);
+  text-transform:uppercase;
+  font-weight:850;
+  letter-spacing:.08em;
+}
+.mini-upcoming{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:7px;
+  margin-top:12px;
+}
+.mini-upcoming button{
+  border:1px solid var(--line);
+  background:var(--panel2);
+  color:var(--text);
+  border-radius:8px;
+  padding:10px;
+  text-align:left;
+  cursor:pointer;
+  display:grid;
+  gap:4px;
+}
+.mini-upcoming button:hover{
+  border-color:rgba(227,27,35,.25);
+}
+.mini-upcoming b{
+  font-size:11px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.mini-upcoming small{
+  font-size:9px;
+  color:var(--muted);
+}
+.clear-week{
+  grid-column:1/-1;
+  color:var(--muted);
+  font-size:12px;
+  padding:14px 0;
+}
+@media(max-width:900px){
+  .week-strip{grid-template-columns:repeat(4,1fr)}
+  .momentum-grid{grid-template-columns:1fr}
+  .mini-upcoming{grid-template-columns:1fr}
+}
